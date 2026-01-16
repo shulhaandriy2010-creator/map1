@@ -65,14 +65,15 @@ hr { margin:10px 0; }
 <div id="map"></div>
 
 <script>
+// --- Налаштування ---
 const UA_NAMES = {
-  "UA05":"Вінницька","UA07":"Волинська","UA09":"Луганська","UA12":"Дніпропетровська",
-  "UA14":"Донецька","UA18":"Житомирська","UA21":"Закарпатська","UA23":"Запорізька",
-  "UA26":"Івано-Франківська","UA30":"Київська","UA32":"м. Київ","UA35":"Кіровоградська",
-  "UA40":"м. Севастополь","UA43":"АР Крим","UA46":"Львівська","UA48":"Миколаївська",
-  "UA51":"Одеська","UA53":"Полтавська","UA56":"Рівненська","UA59":"Сумська",
-  "UA61":"Тернопільська","UA63":"Харківська","UA65":"Херсонська","UA68":"Хмельницька",
-  "UA71":"Черкаська","UA74":"Чернігівська","UA77":"Чернівецька"
+"UA05":"Вінницька","UA07":"Волинська","UA09":"Луганська","UA12":"Дніпропетровська",
+"UA14":"Донецька","UA18":"Житомирська","UA21":"Закарпатська","UA23":"Запорізька",
+"UA26":"Івано-Франківська","UA30":"Київська","UA32":"м. Київ","UA35":"Кіровоградська",
+"UA40":"м. Севастополь","UA43":"АР Крим","UA46":"Львівська","UA48":"Миколаївська",
+"UA51":"Одеська","UA53":"Полтавська","UA56":"Рівненська","UA59":"Сумська",
+"UA61":"Тернопільська","UA63":"Харківська","UA65":"Херсонська","UA68":"Хмельницька",
+"UA71":"Черкаська","UA74":"Чернігівська","UA77":"Чернівецька"
 };
 
 const state = {};
@@ -82,7 +83,7 @@ let geoLayer = null;
 const map = L.map("map").setView([49,31],6);
 L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png").addTo(map);
 
-// --- Використовуємо локальний ua.json ---
+// --- Завантаження локального GeoJSON ---
 fetch("ua.json")
 .then(r=>r.json())
 .then(data=>{
@@ -92,7 +93,6 @@ fetch("ua.json")
     state[code]={name:UA_NAMES[code]||code, fill:"#74add1", text:"#000000", note:""};
   });
 
-  // Додавання геошару
   geoLayer = L.geoJSON(data, {
     style: f=>{
       const code = f.properties.iso_3166_2 || f.properties.ISO_3166_2 || f.properties.id;
@@ -115,21 +115,19 @@ function selectRegion(code){
   document.getElementById("note").value = r.note;
 }
 
-document.getElementById("fillColor").oninput = e=>{
+// --- Зміна кольору заливки ---
+document.getElementById("fillColor").addEventListener("input", ()=>{
   if(!selectedCode) return;
-  state[selectedCode].fill=e.target.value;
+  state[selectedCode].fill=document.getElementById("fillColor").value;
   geoLayer.setStyle(f=>{
     const c=f.properties.iso_3166_2||f.properties.ISO_3166_2||f.properties.id;
     return { fillColor: state[c].fill };
   });
-};
+});
 
-document.getElementById("textColor").oninput=document.getElementById("note").oninput=()=>{
-  if(!selectedCode) return;
-  state[selectedCode].text=document.getElementById("textColor").value;
-  state[selectedCode].note=document.getElementById("note").value;
-  updateLabels();
-};
+// --- Зміна тексту ---
+document.getElementById("textColor").addEventListener("input", updateLabels);
+document.getElementById("note").addEventListener("input", updateLabels);
 
 function addLabel(layer, code){
   const center=layer.getBounds().getCenter();
@@ -137,20 +135,25 @@ function addLabel(layer, code){
     icon:L.divIcon({
       className:"",
       html:`<div style="font-size:10px;text-align:center;color:${state[code].text}">
-        <b>${layer.feature.properties.name||UA_NAMES[code]}</b><br>${state[code].note}</div>`
+      <b>${UA_NAMES[code]||layer.feature.properties.name}</b><br>${state[code].note}</div>`
     })
   }).addTo(map);
 }
 
 function updateLabels(){
+  if(!selectedCode) return;
+  state[selectedCode].text=document.getElementById("textColor").value;
+  state[selectedCode].note=document.getElementById("note").value;
   geoLayer.eachLayer(layer=>{
     const code=layer.feature.properties.iso_3166_2||layer.feature.properties.ISO_3166_2||layer.feature.properties.id;
-    if(layer.label) map.removeLayer(layer.label);
-    addLabel(layer, code);
+    if(code===selectedCode){
+      if(layer.label) map.removeLayer(layer.label);
+      addLabel(layer, code);
+    }
   });
 }
 
-// --- Стрілки ---
+// --- Додавання стрілки ---
 document.getElementById("addArrow").onclick=()=>{
   if(!selectedCode) return;
   const arrow=document.getElementById("arrowType").value==="up"?"⬆":"⬇";
@@ -159,13 +162,17 @@ document.getElementById("addArrow").onclick=()=>{
     const code=layer.feature.properties.iso_3166_2||layer.feature.properties.ISO_3166_2||layer.feature.properties.id;
     if(code===selectedCode){
       const center=layer.getBounds().getCenter();
-      L.marker(center,{icon:L.divIcon({html:`<div style="font-size:26px;color:${color};text-align:center">${arrow}</div>`})}).addTo(map);
+      L.marker(center,{
+        icon:L.divIcon({
+          html:`<div style="font-size:26px;color:${color};text-align:center">${arrow}</div>`
+        })
+      }).addTo(map);
     }
   });
 };
 
-// --- Pie chart ---
-function pieSVG(values, colors, text){
+// --- Додавання pie chart ---
+function pieSVG(values,colors,text){
   let total=values.reduce((a,b)=>a+b,0);
   let angle=0, paths="";
   values.forEach((v,i)=>{
@@ -189,12 +196,17 @@ document.getElementById("addPie").onclick=()=>{
     const code=layer.feature.properties.iso_3166_2||layer.feature.properties.ISO_3166_2||layer.feature.properties.id;
     if(code===selectedCode){
       const center=layer.getBounds().getCenter();
-      L.marker(center,{icon:L.divIcon({html:pieSVG(values,colors,text), iconSize:[100,100]})}).addTo(map);
+      L.marker(center,{
+        icon:L.divIcon({
+          html:pieSVG(values,colors,text),
+          iconSize:[100,100]
+        })
+      }).addTo(map);
     }
   });
 };
 
-// --- Export PNG ---
+// --- Експорт у PNG ---
 document.getElementById("exportBtn").onclick=()=>{
   html2canvas(map.getContainer()).then(canvas=>{
     const a=document.createElement("a");
