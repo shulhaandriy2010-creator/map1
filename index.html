@@ -28,7 +28,7 @@ hr { margin:10px 0; }
 <label>Колір тексту</label>
 <input type="color" id="textColor">
 
-<label>Текст</label>
+<label>Додатковий текст</label>
 <textarea id="note"></textarea>
 
 <hr>
@@ -66,13 +66,13 @@ hr { margin:10px 0; }
 
 <script>
 const UA_NAMES = {
-  "UA05": "Вінницька", "UA07": "Волинська", "UA09": "Луганська", "UA12": "Дніпропетровська",
-  "UA14": "Донецька", "UA18": "Житомирська", "UA21": "Закарпатська", "UA23": "Запорізька",
-  "UA26": "Івано-Франківська", "UA30": "Київська", "UA32": "м. Київ", "UA35": "Кіровоградська",
-  "UA40": "м. Севастополь", "UA43": "АР Крим", "UA46": "Львівська", "UA48": "Миколаївська",
-  "UA51": "Одеська", "UA53": "Полтавська", "UA56": "Рівненська", "UA59": "Сумська",
-  "UA61": "Тернопільська", "UA63": "Харківська", "UA65": "Херсонська", "UA68": "Хмельницька",
-  "UA71": "Черкаська", "UA74": "Чернігівська", "UA77": "Чернівецька"
+  "UA05":"Вінницька","UA07":"Волинська","UA09":"Луганська","UA12":"Дніпропетровська",
+  "UA14":"Донецька","UA18":"Житомирська","UA21":"Закарпатська","UA23":"Запорізька",
+  "UA26":"Івано-Франківська","UA30":"Київська","UA32":"м. Київ","UA35":"Кіровоградська",
+  "UA40":"м. Севастополь","UA43":"АР Крим","UA46":"Львівська","UA48":"Миколаївська",
+  "UA51":"Одеська","UA53":"Полтавська","UA56":"Рівненська","UA59":"Сумська",
+  "UA61":"Тернопільська","UA63":"Харківська","UA65":"Херсонська","UA68":"Хмельницька",
+  "UA71":"Черкаська","UA74":"Чернігівська","UA77":"Чернівецька"
 };
 
 const state = {};
@@ -82,35 +82,27 @@ let geoLayer = null;
 const map = L.map("map").setView([49,31],6);
 L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png").addTo(map);
 
-// --- Завантажуємо GeoJSON онлайн ---
+// --- Онлайн GeoJSON ---
 fetch("https://raw.githubusercontent.com/deldersveld/topojson/master/countries/ukraine/ukr-adm1.json")
 .then(r=>r.json())
 .then(data=>{
-  geoLayer = L.geoJSON(data.features, {
-    style: f=>{
+  geoLayer = L.geoJSON(data.features,{
+    style:f=>{
       const code = f.properties.iso_3166_2 || f.properties.id;
-      if(!state[code]) state[code] = { name: UA_NAMES[code]||code, fill:"#74add1", text:"#000", note:"" };
-      return { fillColor: state[code].fill, weight:1, color:"#333", fillOpacity:0.85 };
+      if(!state[code]) state[code]={name:UA_NAMES[code]||code, fill:"#74add1", text:"#000000", note:""};
+      return { fillColor: state[code].fill, color:"#333", weight:1, fillOpacity:0.85 };
     },
-    onEachFeature: (f,l)=>{
+    onEachFeature:(f,l)=>{
       const code = f.properties.iso_3166_2 || f.properties.id;
       l.on("click",()=>selectRegion(code));
-      const center = l.getBounds().getCenter();
-      l.label = L.marker(center,{
-        icon:L.divIcon({
-          className:"",
-          html:`<div style="font-size:10px;text-align:center;color:${state[code].text}">
-            <b>${state[code].name}</b><br>${state[code].note}
-          </div>`
-        })
-      }).addTo(map);
+      addLabel(l, code);
     }
   }).addTo(map);
 });
 
 function selectRegion(code){
-  selectedCode = code;
-  const r = state[code];
+  selectedCode=code;
+  const r=state[code];
   document.getElementById("regionTitle").innerText = r.name;
   document.getElementById("fillColor").value = r.fill;
   document.getElementById("textColor").value = r.text;
@@ -119,68 +111,59 @@ function selectRegion(code){
 
 document.getElementById("fillColor").oninput = e=>{
   if(!selectedCode) return;
-  state[selectedCode].fill = e.target.value;
-  geoLayer.setStyle(f=>{
-    const c = f.properties.iso_3166_2 || f.properties.id;
-    return { fillColor: state[c].fill };
-  });
+  state[selectedCode].fill=e.target.value;
+  geoLayer.setStyle(f=>({ fillColor: state[f.properties.iso_3166_2||f.properties.id].fill }));
 };
+
+document.getElementById("textColor").oninput = document.getElementById("note").oninput = ()=>{
+  if(!selectedCode) return;
+  state[selectedCode].text=document.getElementById("textColor").value;
+  state[selectedCode].note=document.getElementById("note").value;
+  updateLabels();
+};
+
+function addLabel(layer, code){
+  const center=layer.getBounds().getCenter();
+  layer.label=L.marker(center,{
+    icon:L.divIcon({
+      className:"",
+      html:`<div style="font-size:10px;text-align:center;color:${state[code].text}">
+        <b>${layer.feature.properties.name||UA_NAMES[code]}</b><br>${state[code].note}</div>`
+    })
+  }).addTo(map);
+}
 
 function updateLabels(){
   geoLayer.eachLayer(layer=>{
     const code = layer.feature.properties.iso_3166_2 || layer.feature.properties.id;
-    const center = layer.getBounds().getCenter();
     if(layer.label) map.removeLayer(layer.label);
-    layer.label = L.marker(center,{
-      icon:L.divIcon({
-        className:"",
-        html:`<div style="font-size:10px;text-align:center;color:${state[code].text}">
-          <b>${layer.feature.properties.name||UA_NAMES[code]}</b><br>${state[code].note}
-        </div>`
-      })
-    }).addTo(map);
+    addLabel(layer, code);
   });
 }
 
-document.getElementById("textColor").oninput = e=>{
-  if(!selectedCode) return;
-  state[selectedCode].text = e.target.value;
-  updateLabels();
-};
-
-document.getElementById("note").oninput = e=>{
-  if(!selectedCode) return;
-  state[selectedCode].note = e.target.value;
-  updateLabels();
-};
-
 // --- Стрілки ---
-document.getElementById("addArrow").onclick = ()=>{
+document.getElementById("addArrow").onclick=()=>{
   if(!selectedCode) return;
-  const arrow = document.getElementById("arrowType").value==="up"?"⬆":"⬇";
-  const color = document.getElementById("arrowColor").value;
+  const arrow=document.getElementById("arrowType").value==="up"?"⬆":"⬇";
+  const color=document.getElementById("arrowColor").value;
   geoLayer.eachLayer(layer=>{
-    const code = layer.feature.properties.iso_3166_2 || layer.feature.properties.id;
+    const code=layer.feature.properties.iso_3166_2||layer.feature.properties.id;
     if(code===selectedCode){
-      const center = layer.getBounds().getCenter();
-      L.marker(center,{
-        icon:L.divIcon({
-          html:`<div style="font-size:26px;color:${color};text-align:center">${arrow}</div>`
-        })
-      }).addTo(map);
+      const center=layer.getBounds().getCenter();
+      L.marker(center,{icon:L.divIcon({html:`<div style="font-size:26px;color:${color};text-align:center">${arrow}</div>`})}).addTo(map);
     }
   });
 };
 
 // --- Pie chart ---
-function pieSVG(values, colors, text){
-  let total = values.reduce((a,b)=>a+b,0);
+function pieSVG(values,colors,text){
+  let total=values.reduce((a,b)=>a+b,0);
   let angle=0, paths="";
   values.forEach((v,i)=>{
     const a1=angle;
-    const a2=angle + v/total*2*Math.PI;
-    const x1=50 + 50*Math.cos(a1), y1=50 + 50*Math.sin(a1);
-    const x2=50 + 50*Math.cos(a2), y2=50 + 50*Math.sin(a2);
+    const a2=angle+v/total*2*Math.PI;
+    const x1=50+50*Math.cos(a1), y1=50+50*Math.sin(a1);
+    const x2=50+50*Math.cos(a2), y2=50+50*Math.sin(a2);
     const large=a2-a1>Math.PI?1:0;
     paths+=`<path d="M50 50 L${x1} ${y1} A50 50 0 ${large} 1 ${x2} ${y2} Z" fill="${colors[i]}"/>`;
     angle=a2;
@@ -188,27 +171,22 @@ function pieSVG(values, colors, text){
   return `<svg width="100" height="100">${paths}<text x="50" y="55" text-anchor="middle" font-size="12">${text}</text></svg>`;
 }
 
-document.getElementById("addPie").onclick = ()=>{
+document.getElementById("addPie").onclick=()=>{
   if(!selectedCode) return;
-  const values = document.getElementById("pieValues").value.split(",").map(Number);
-  const colors = document.getElementById("pieColors").value.split(",");
-  const text = document.getElementById("pieText").value;
+  const values=document.getElementById("pieValues").value.split(",").map(Number);
+  const colors=document.getElementById("pieColors").value.split(",");
+  const text=document.getElementById("pieText").value;
   geoLayer.eachLayer(layer=>{
-    const code = layer.feature.properties.iso_3166_2 || layer.feature.properties.id;
+    const code=layer.feature.properties.iso_3166_2||layer.feature.properties.id;
     if(code===selectedCode){
-      const center = layer.getBounds().getCenter();
-      L.marker(center,{
-        icon:L.divIcon({
-          html: pieSVG(values, colors, text),
-          iconSize:[100,100]
-        })
-      }).addTo(map);
+      const center=layer.getBounds().getCenter();
+      L.marker(center,{icon:L.divIcon({html:pieSVG(values,colors,text), iconSize:[100,100]})}).addTo(map);
     }
   });
 };
 
 // --- Export PNG ---
-document.getElementById("exportBtn").onclick = ()=>{
+document.getElementById("exportBtn").onclick=()=>{
   html2canvas(map.getContainer()).then(canvas=>{
     const a=document.createElement("a");
     a.href=canvas.toDataURL();
