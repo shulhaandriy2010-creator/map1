@@ -4,189 +4,205 @@
 <meta charset="UTF-8">
 <title>Інтерактивна карта України</title>
 
-<!-- Leaflet (працює ВСЮДИ) -->
-<link
-  rel="stylesheet"
-  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
 <style>
-  body {
-    margin: 0;
-    font-family: Arial, sans-serif;
-    display: flex;
-    height: 100vh;
-  }
-
-  #sidebar {
-    width: 300px;
-    padding: 15px;
-    border-right: 1px solid #ddd;
-    box-sizing: border-box;
-  }
-
-  #map {
-    flex: 1;
-  }
-
-  label {
-    display: block;
-    margin-top: 10px;
-    font-size: 14px;
-  }
-
-  input, textarea {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 5px;
-  }
+body { margin:0; font-family: Arial; display:flex; height:100vh; }
+#sidebar { width:320px; padding:15px; border-right:1px solid #ccc; overflow-y:auto; }
+#map { flex:1; }
+label { display:block; margin-top:10px; font-size:14px; }
+input, textarea, select, button { width:100%; margin-top:4px; padding:6px; }
+hr { margin:10px 0; }
 </style>
 </head>
-
 <body>
 
 <div id="sidebar">
-  <h3 id="regionTitle">Виберіть регіон</h3>
+<h3 id="regionTitle">Виберіть регіон</h3>
 
-  <label>Колір заливки</label>
-  <input type="color" id="fillColor">
+<label>Колір області</label>
+<input type="color" id="fillColor">
 
-  <label>Колір тексту</label>
-  <input type="color" id="textColor">
+<label>Колір тексту</label>
+<input type="color" id="textColor">
 
-  <label>Додатковий текст</label>
-  <textarea id="note" rows="3"></textarea>
+<label>Додатковий текст</label>
+<textarea id="note"></textarea>
+
+<hr>
+
+<label>Стрілка</label>
+<select id="arrowType">
+<option value="up">⬆ Вгору</option>
+<option value="down">⬇ Вниз</option>
+</select>
+
+<label>Колір стрілки</label>
+<input type="color" id="arrowColor" value="#ff0000">
+
+<button id="addArrow">Додати стрілку</button>
+
+<hr>
+
+<label>Дані діаграми (через коми)</label>
+<input id="pieValues" placeholder="40,30,30">
+
+<label>Кольори секторів (через коми)</label>
+<input id="pieColors" placeholder="#ff0000,#00ff00,#0000ff">
+
+<label>Текст у центрі</label>
+<input id="pieText" placeholder="100">
+
+<button id="addPie">Додати діаграму</button>
+
+<hr>
+
+<button id="exportBtn">Експортувати PNG</button>
 </div>
 
 <div id="map"></div>
 
 <script>
 const UA_NAMES = {
-  "UA05": "Вінницька",
-  "UA07": "Волинська",
-  "UA09": "Луганська",
-  "UA12": "Дніпропетровська",
-  "UA14": "Донецька",
-  "UA18": "Житомирська",
-  "UA21": "Закарпатська",
-  "UA23": "Запорізька",
-  "UA26": "Івано-Франківська",
-  "UA30": "Київська",
-  "UA32": "м. Київ",
-  "UA35": "Кіровоградська",
-  "UA40": "м. Севастополь",
-  "UA43": "АР Крим",
-  "UA46": "Львівська",
-  "UA48": "Миколаївська",
-  "UA51": "Одеська",
-  "UA53": "Полтавська",
-  "UA56": "Рівненська",
-  "UA59": "Сумська",
-  "UA61": "Тернопільська",
-  "UA63": "Харківська",
-  "UA65": "Херсонська",
-  "UA68": "Хмельницька",
-  "UA71": "Черкаська",
-  "UA74": "Чернігівська",
-  "UA77": "Чернівецька"
+  "UA05":"Вінницька","UA07":"Волинська","UA09":"Луганська","UA12":"Дніпропетровська",
+  "UA14":"Донецька","UA18":"Житомирська","UA21":"Закарпатська","UA23":"Запорізька",
+  "UA26":"Івано-Франківська","UA30":"Київська","UA32":"м. Київ","UA35":"Кіровоградська",
+  "UA40":"м. Севастополь","UA43":"АР Крим","UA46":"Львівська","UA48":"Миколаївська",
+  "UA51":"Одеська","UA53":"Полтавська","UA56":"Рівненська","UA59":"Сумська",
+  "UA61":"Тернопільська","UA63":"Харківська","UA65":"Херсонська","UA68":"Хмельницька",
+  "UA71":"Черкаська","UA74":"Чернігівська","UA77":"Чернівецька"
 };
 
 const state = {};
 let selectedCode = null;
 let geoLayer = null;
 
-const map = L.map("map").setView([49, 31], 6);
-L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-  attribution: ""
-}).addTo(map);
+const map = L.map("map").setView([49,31],6);
+L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png").addTo(map);
 
+// --- Використовуємо локальний ua.json ---
 fetch("ua.json")
-  .then(r => r.json())
-  .then(data => {
-    data.features.forEach(f => {
-      const code = f.properties.iso_3166_2 || f.properties.ISO_3166_2 || f.properties.id;
-      state[code] = {
-        name: UA_NAMES[code] || code,
-        fill: "#74add1",
-        text: "#000000",
-        note: ""
-      };
-    });
-
-    geoLayer = L.geoJSON(data, {
-      style: feature => {
-        const c = feature.properties.iso_3166_2 || feature.properties.ISO_3166_2 || feature.properties.id;
-        return {
-          fillColor: state[c]?.fill || "#ccc",
-          weight: 1,
-          color: "#333",
-          fillOpacity: 0.85
-        };
-      },
-      onEachFeature: (feature, layer) => {
-        const code = feature.properties.iso_3166_2 || feature.properties.ISO_3166_2 || feature.properties.id;
-
-        layer.on("click", () => selectRegion(code));
-
-        const center = layer.getBounds().getCenter();
-        layer.label = L.marker(center, {
-          icon: L.divIcon({
-            className: "",
-            html: `<div style="font-size:10px;text-align:center;color:${state[code].text}">
-              <b>${state[code].name}</b><br>${state[code].note}
-            </div>`
-          })
-        }).addTo(map);
-      }
-    }).addTo(map);
+.then(r=>r.json())
+.then(data=>{
+  // Ініціалізація стану
+  data.features.forEach(f=>{
+    const code = f.properties.iso_3166_2 || f.properties.ISO_3166_2 || f.properties.id;
+    state[code]={name:UA_NAMES[code]||code, fill:"#74add1", text:"#000000", note:""};
   });
 
-function selectRegion(code) {
-  selectedCode = code;
-  const r = state[code];
+  // Додавання геошару
+  geoLayer = L.geoJSON(data, {
+    style: f=>{
+      const code = f.properties.iso_3166_2 || f.properties.ISO_3166_2 || f.properties.id;
+      return { fillColor: state[code].fill, color:"#333", weight:1, fillOpacity:0.85 };
+    },
+    onEachFeature: (f,l)=>{
+      const code = f.properties.iso_3166_2 || f.properties.ISO_3166_2 || f.properties.id;
+      l.on("click", ()=>selectRegion(code));
+      addLabel(l, code);
+    }
+  }).addTo(map);
+});
 
+function selectRegion(code){
+  selectedCode=code;
+  const r=state[code];
   document.getElementById("regionTitle").innerText = r.name;
   document.getElementById("fillColor").value = r.fill;
   document.getElementById("textColor").value = r.text;
   document.getElementById("note").value = r.note;
 }
 
-document.getElementById("fillColor").oninput = e => {
-  if (!selectedCode) return;
-  state[selectedCode].fill = e.target.value;
-  geoLayer.setStyle(f => {
-    const c = f.properties.iso_3166_2 || f.properties.ISO_3166_2 || f.properties.id;
+document.getElementById("fillColor").oninput = e=>{
+  if(!selectedCode) return;
+  state[selectedCode].fill=e.target.value;
+  geoLayer.setStyle(f=>{
+    const c=f.properties.iso_3166_2||f.properties.ISO_3166_2||f.properties.id;
     return { fillColor: state[c].fill };
   });
 };
 
-document.getElementById("textColor").oninput = e => {
-  if (!selectedCode) return;
-  state[selectedCode].text = e.target.value;
-  map.eachLayer(l => {
-    if (l.label) map.removeLayer(l.label);
+document.getElementById("textColor").oninput=document.getElementById("note").oninput=()=>{
+  if(!selectedCode) return;
+  state[selectedCode].text=document.getElementById("textColor").value;
+  state[selectedCode].note=document.getElementById("note").value;
+  updateLabels();
+};
+
+function addLabel(layer, code){
+  const center=layer.getBounds().getCenter();
+  layer.label=L.marker(center,{
+    icon:L.divIcon({
+      className:"",
+      html:`<div style="font-size:10px;text-align:center;color:${state[code].text}">
+        <b>${layer.feature.properties.name||UA_NAMES[code]}</b><br>${state[code].note}</div>`
+    })
+  }).addTo(map);
+}
+
+function updateLabels(){
+  geoLayer.eachLayer(layer=>{
+    const code=layer.feature.properties.iso_3166_2||layer.feature.properties.ISO_3166_2||layer.feature.properties.id;
+    if(layer.label) map.removeLayer(layer.label);
+    addLabel(layer, code);
   });
-  geoLayer.eachLayer(layer => {
-    const c = layer.feature.properties.iso_3166_2 || layer.feature.properties.ISO_3166_2 || layer.feature.properties.id;
-    const center = layer.getBounds().getCenter();
-    layer.label = L.marker(center, {
-      icon: L.divIcon({
-        className: "",
-        html: `<div style="font-size:10px;text-align:center;color:${state[c].text}">
-          <b>${state[c].name}</b><br>${state[c].note}
-        </div>`
-      })
-    }).addTo(map);
+}
+
+// --- Стрілки ---
+document.getElementById("addArrow").onclick=()=>{
+  if(!selectedCode) return;
+  const arrow=document.getElementById("arrowType").value==="up"?"⬆":"⬇";
+  const color=document.getElementById("arrowColor").value;
+  geoLayer.eachLayer(layer=>{
+    const code=layer.feature.properties.iso_3166_2||layer.feature.properties.ISO_3166_2||layer.feature.properties.id;
+    if(code===selectedCode){
+      const center=layer.getBounds().getCenter();
+      L.marker(center,{icon:L.divIcon({html:`<div style="font-size:26px;color:${color};text-align:center">${arrow}</div>`})}).addTo(map);
+    }
   });
 };
 
-document.getElementById("note").oninput = e => {
-  if (!selectedCode) return;
-  state[selectedCode].note = e.target.value;
-  document.getElementById("textColor").dispatchEvent(new Event("input"));
+// --- Pie chart ---
+function pieSVG(values, colors, text){
+  let total=values.reduce((a,b)=>a+b,0);
+  let angle=0, paths="";
+  values.forEach((v,i)=>{
+    const a1=angle;
+    const a2=angle+v/total*2*Math.PI;
+    const x1=50+50*Math.cos(a1), y1=50+50*Math.sin(a1);
+    const x2=50+50*Math.cos(a2), y2=50+50*Math.sin(a2);
+    const large=a2-a1>Math.PI?1:0;
+    paths+=`<path d="M50 50 L${x1} ${y1} A50 50 0 ${large} 1 ${x2} ${y2} Z" fill="${colors[i]}"/>`;
+    angle=a2;
+  });
+  return `<svg width="100" height="100">${paths}<text x="50" y="55" text-anchor="middle" font-size="12">${text}</text></svg>`;
+}
+
+document.getElementById("addPie").onclick=()=>{
+  if(!selectedCode) return;
+  const values=document.getElementById("pieValues").value.split(",").map(Number);
+  const colors=document.getElementById("pieColors").value.split(",");
+  const text=document.getElementById("pieText").value;
+  geoLayer.eachLayer(layer=>{
+    const code=layer.feature.properties.iso_3166_2||layer.feature.properties.ISO_3166_2||layer.feature.properties.id;
+    if(code===selectedCode){
+      const center=layer.getBounds().getCenter();
+      L.marker(center,{icon:L.divIcon({html:pieSVG(values,colors,text), iconSize:[100,100]})}).addTo(map);
+    }
+  });
+};
+
+// --- Export PNG ---
+document.getElementById("exportBtn").onclick=()=>{
+  html2canvas(map.getContainer()).then(canvas=>{
+    const a=document.createElement("a");
+    a.href=canvas.toDataURL();
+    a.download="ukraine-map.png";
+    a.click();
+  });
 };
 </script>
-
 </body>
 </html>
