@@ -162,7 +162,9 @@ document.getElementById("addArrow").onclick=()=>{
     const code=layer.feature.properties.iso_3166_2||layer.feature.properties.ISO_3166_2||layer.feature.properties.id;
     if(code===selectedCode){
       const center=layer.getBounds().getCenter();
-      L.marker(center,{
+      // Зсув трохи вгору, щоб не перекривати текст
+      const newLat=center.lat + 0.2;
+      L.marker([newLat, center.lng],{
         icon:L.divIcon({
           html:`<div style="font-size:26px;color:${color};text-align:center">${arrow}</div>`
         })
@@ -172,20 +174,27 @@ document.getElementById("addArrow").onclick=()=>{
 };
 
 // --- Додавання pie chart ---
-function pieSVG(values,colors,text){
-  let total=values.reduce((a,b)=>a+b,0);
-  let angle=0, paths="";
-  values.forEach((v,i)=>{
-    const a1=angle;
-    const a2=angle+v/total*2*Math.PI;
-    const x1=50+50*Math.cos(a1), y1=50+50*Math.sin(a1);
-    const x2=50+50*Math.cos(a2), y2=50+50*Math.sin(a2);
-    const large=a2-a1>Math.PI?1:0;
-    paths+=`<path d="M50 50 L${x1} ${y1} A50 50 0 ${large} 1 ${x2} ${y2} Z" fill="${colors[i]}"/>`;
-    angle=a2;
+document.getElementById("addPie").onclick=()=>{
+  if(!selectedCode) return;
+  const values=document.getElementById("pieValues").value.split(",").map(Number);
+  const colors=document.getElementById("pieColors").value.split(",");
+  const text=document.getElementById("pieText").value;
+  geoLayer.eachLayer(layer=>{
+    const code=layer.feature.properties.iso_3166_2||layer.feature.properties.ISO_3166_2||layer.feature.properties.id;
+    if(code===selectedCode){
+      const center=layer.getBounds().getCenter();
+      // Зсув трохи вниз, щоб не перекривати текст
+      const newLat=center.lat - 0.2;
+      L.marker([newLat, center.lng],{
+        icon:L.divIcon({
+          html:pieSVG(values,colors,text),
+          iconSize:[100,100]
+        })
+      }).addTo(map);
+    }
   });
-  return `<svg width="100" height="100">${paths}<text x="50" y="55" text-anchor="middle" font-size="12">${text}</text></svg>`;
-}
+};
+
 
 document.getElementById("addPie").onclick=()=>{
   if(!selectedCode) return;
@@ -218,3 +227,4 @@ document.getElementById("exportBtn").onclick=()=>{
 </script>
 </body>
 </html>
+
