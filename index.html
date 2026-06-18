@@ -1,11 +1,14 @@
-<!DOCTYPE html>
+"<!DOCTYPE html>
 <html lang="uk">
 <head>
 <meta charset="UTF-8">
 <title>Інтерактивна карта України</title>
 
-<!-- Повертаємо оригінальне підключення Leaflet, яке було у вас спочатку -->
-<link rel="stylesheet" href="https://unpkg.com" />
+<!-- Leaflet (працює ВСЮДИ) -->
+<link
+  rel="stylesheet"
+  href="https://unpkg.com"
+/>
 <script src="https://unpkg.com"></script>
 
 <style>
@@ -17,11 +20,10 @@
   }
 
   #sidebar {
-    width: 320px;
+    width: 300px;
     padding: 15px;
     border-right: 1px solid #ddd;
     box-sizing: border-box;
-    overflow-y: auto;
   }
 
   #map {
@@ -34,19 +36,13 @@
     font-size: 14px;
   }
 
-  /* Текст для введення збільшено у два рази (було ~14px, стало 28px) */
   input, textarea {
     width: 100%;
     box-sizing: border-box;
     padding: 10px;
-    font-size: 28px; 
   }
 
-  input[type="color"] {
-    height: 50px;
-    padding: 2px;
-  }
-
+  /* Стилі для прозорих підписів областей без білих рамок Leaflet */
   .region-tooltip {
     background: transparent !important;
     border: none !important;
@@ -69,48 +65,56 @@
 
   <label>Додатковий текст</label>
   <textarea id="note" rows="3"></textarea>
-
-  <!-- Нові елементи: окрема палітра та друге текстове поле -->
-  <label>Колір тексту замітки 2</label>
-  <input type="color" id="textColor2">
-
-  <label>Додатковий текст 2</label>
-  <textarea id="note2" rows="3"></textarea>
 </div>
 
 <div id="map"></div>
 
 <script>
 const UA_NAMES = {
-  "UA05": "Вінницька", "UA07": "Волинська", "UA09": "Луганська",
-  "UA12": "Дніпропетровська", "UA14": "Донецька", "UA18": "Житомирська",
-  "UA21": "Закарпатська", "UA23": "Запорізька", "UA26": "Івано-Франківська",
-  "UA30": "Київська", "UA32": "м. Київ", "UA35": "Кіровоградська",
-  "UA40": "м. Севастополь", "UA43": "АР Крим", "UA46": "Львівська",
-  "UA48": "Миколаївська", "UA51": "Одеська", "UA53": "Полтавська",
-  "UA56": "Рівненська", "UA59": "Сумська", "UA61": "Тернопільська",
-  "UA63": "Харківська", "UA65": "Херсонська", "UA68": "Хмельницька",
-  "UA71": "Черкаська", "UA74": "Чернігівська", "UA77": "Чернівецька"
+  "UA05": "Вінницька",
+  "UA07": "Волинська",
+  "UA09": "Луганська",
+  "UA12": "Дніпропетровська",
+  "UA14": "Донецька",
+  "UA18": "Житомирська",
+  "UA21": "Закарпатська",
+  "UA23": "Запорізька",
+  "UA26": "Івано-Франківська",
+  "UA30": "Київська",
+  "UA32": "м. Київ",
+  "UA35": "Кіровоградська",
+  "UA40": "м. Севастополь",
+  "UA43": "АР Крим",
+  "UA46": "Львівська",
+  "UA48": "Миколаївська",
+  "UA51": "Одеська",
+  "UA53": "Полтавська",
+  "UA56": "Рівненська",
+  "UA59": "Сумська",
+  "UA61": "Тернопільська",
+  "UA63": "Харківська",
+  "UA65": "Херсонська",
+  "UA68": "Хмельницька",
+  "UA71": "Черкаська",
+  "UA74": "Чернігівська",
+  "UA77": "Чернівецька"
 };
 
 const state = {};
 let selectedCode = null;
 let geoLayer = null;
 
-// Повертаємо оригінальні координати, які були у вас спочатку
 const map = L.map("map").setView([49, 31], 6);
 L.tileLayer("https://{s}://{z}/{x}/{y}{r}.png", {
   attribution: ""
 }).addTo(map);
 
-// Функція формування тексту з урахуванням обох заміток та їх особистих кольорів
+// Функція формування HTML для підпису області
 function createTooltipHtml(r) {
-  const noteHtml = r.note ? `<div style="margin-top:4px; font-weight:normal; color:${r.text};">${r.note.replace(/\n/g, '<br>')}</div>` : '';
-  const noteHtml2 = r.note2 ? `<div style="margin-top:4px; font-weight:normal; color:${r.text2};">${r.note2.replace(/\n/g, '<br>')}</div>` : '';
-  return `<div style="font-size:11px; text-align:center; font-family:Arial,sans-serif; line-height:1.2;">
-    <b style="color:${r.text};">${r.name}</b>
-    ${noteHtml}
-    ${noteHtml2}
+  // Замінюємо переноси рядків на <br> та огортаємо в блок, якщо текст є
+  const noteHtml = r.note ? `<div style="margin-top:4px; font-weight:normal;">${r.note.replace(/\n/g, '<br>')}</div>` : '';
+  return `<div style="font-size:11px; text-align:center; color:${r.text}; font-family:Arial,sans-serif; line-height:1.2;">
+    <b>${r.name}</b>${noteHtml}
   </div>`;
 }
 
@@ -123,9 +127,7 @@ fetch("ua.json")
         name: UA_NAMES[code] || code,
         fill: "#74add1",
         text: "#000000",
-        text2: "#ff0000", // Початковий колір для другої замітки — червоний
-        note: "",
-        note2: ""
+        note: ""
       };
     });
 
@@ -142,18 +144,25 @@ fetch("ua.json")
       onEachFeature: (feature, layer) => {
         const code = feature.properties.iso_3166_2 || feature.properties.ISO_3166_2 || feature.properties.id;
 
+        // Події миші для інтерактивності контурів
         layer.on({
           mouseover: (e) => {
             const l = e.target;
-            l.setStyle({ weight: 3, color: "#000" });
+            l.setStyle({
+              weight: 3,     // Товщина лінії при наведенні
+              color: "#000"  // Колір лінії при наведенні
+            });
             if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
-              l.bringToFront();
+              l.bringToFront(); // Виводить шар на передній план
             }
           },
-          mouseout: (e) => { geoLayer.resetStyle(e.target); },
+          mouseout: (e) => {
+            geoLayer.resetStyle(e.target); // Повертає початковий тонкий стиль
+          },
           click: () => selectRegion(code)
         });
 
+        // Створення постійного підпису по центру кожної області
         layer.bindTooltip(() => createTooltipHtml(state[code]), {
           permanent: true,
           direction: "center",
@@ -171,12 +180,9 @@ function selectRegion(code) {
   document.getElementById("fillColor").value = r.fill;
   document.getElementById("textColor").value = r.text;
   document.getElementById("note").value = r.note;
-  
-  // Оновлення нових полів у формі при виборі області
-  document.getElementById("textColor2").value = r.text2;
-  document.getElementById("note2").value = r.note2;
 }
 
+// Зміна кольору заливки
 document.getElementById("fillColor").oninput = e => {
   if (!selectedCode) return;
   state[selectedCode].fill = e.target.value;
@@ -186,32 +192,21 @@ document.getElementById("fillColor").oninput = e => {
   });
 };
 
+// Зміна кольору тексту
 document.getElementById("textColor").oninput = e => {
   if (!selectedCode) return;
   state[selectedCode].text = e.target.value;
   updateActiveTooltip();
 };
 
+// Зміна тексту замітки
 document.getElementById("note").oninput = e => {
   if (!selectedCode) return;
   state[selectedCode].note = e.target.value;
   updateActiveTooltip();
 };
 
-// Зміна кольору для другої замітки
-document.getElementById("textColor2").oninput = e => {
-  if (!selectedCode) return;
-  state[selectedCode].text2 = e.target.value;
-  updateActiveTooltip();
-};
-
-// Зміна тексту другої замітки
-document.getElementById("note2").oninput = e => {
-  if (!selectedCode) return;
-  state[selectedCode].note2 = e.target.value;
-  updateActiveTooltip();
-};
-
+// Точкове оновлення підпису поточної області без перезапуску інших шарів
 function updateActiveTooltip() {
   geoLayer.eachLayer(layer => {
     const c = layer.feature.properties.iso_3166_2 || layer.feature.properties.ISO_3166_2 || layer.feature.properties.id;
