@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>Інтерактивна карта України</title>
 
-<!-- Leaflet (Завжди працює через мережу) -->
+<!-- Повертаємо оригінальне підключення Leaflet, яке було у вас спочатку -->
 <link rel="stylesheet" href="https://unpkg.com" />
 <script src="https://unpkg.com"></script>
 
@@ -22,22 +22,19 @@
     border-right: 1px solid #ddd;
     box-sizing: border-box;
     overflow-y: auto;
-    background: #fff;
   }
 
   #map {
     flex: 1;
-    background: #f0f0f0;
   }
 
   label {
     display: block;
-    margin-top: 15px;
+    margin-top: 10px;
     font-size: 14px;
-    font-weight: bold;
   }
 
-  /* Текст у полях введення збільшено вдвічі (28px) */
+  /* Текст для введення збільшено у два рази (було ~14px, стало 28px) */
   input, textarea {
     width: 100%;
     box-sizing: border-box;
@@ -62,22 +59,23 @@
 <body>
 
 <div id="sidebar">
-  <h3 id="regionTitle" style="font-size: 24px; margin-top: 0;">Виберіть регіон</h3>
+  <h3 id="regionTitle">Виберіть регіон</h3>
 
-  <label>Колір заливки області</label>
+  <label>Колір заливки</label>
   <input type="color" id="fillColor">
 
-  <label>Колір тексту назви</label>
+  <label>Колір тексту</label>
   <input type="color" id="textColor">
 
-  <label>Додатковий текст 1</label>
-  <textarea id="note" rows="2"></textarea>
+  <label>Додатковий текст</label>
+  <textarea id="note" rows="3"></textarea>
 
+  <!-- Нові елементи: окрема палітра та друге текстове поле -->
   <label>Колір тексту замітки 2</label>
   <input type="color" id="textColor2">
 
   <label>Додатковий текст 2</label>
-  <textarea id="note2" rows="2"></textarea>
+  <textarea id="note2" rows="3"></textarea>
 </div>
 
 <div id="map"></div>
@@ -99,30 +97,25 @@ const state = {};
 let selectedCode = null;
 let geoLayer = null;
 
-// Створення карти Leaflet з фокусом на Україну
-const map = L.map("map").setView([48.3, 31.1], 6);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  attribution: "&copy; OpenStreetMap"
+// Повертаємо оригінальні координати, які були у вас спочатку
+const map = L.map("map").setView([49, 31], 6);
+L.tileLayer("https://{s}://{z}/{x}/{y}{r}.png", {
+  attribution: ""
 }).addTo(map);
 
-// Формування віконця з текстом всередині області
+// Функція формування тексту з урахуванням обох заміток та їх особистих кольорів
 function createTooltipHtml(r) {
-  const noteHtml1 = r.note ? `<div style="margin-top:4px; font-weight:normal; color:${r.text};">${r.note.replace(/\n/g, '<br>')}</div>` : '';
+  const noteHtml = r.note ? `<div style="margin-top:4px; font-weight:normal; color:${r.text};">${r.note.replace(/\n/g, '<br>')}</div>` : '';
   const noteHtml2 = r.note2 ? `<div style="margin-top:4px; font-weight:normal; color:${r.text2};">${r.note2.replace(/\n/g, '<br>')}</div>` : '';
-  
-  return `<div style="font-size:12px; text-align:center; font-family:Arial,sans-serif; line-height:1.2;">
+  return `<div style="font-size:11px; text-align:center; font-family:Arial,sans-serif; line-height:1.2;">
     <b style="color:${r.text};">${r.name}</b>
-    ${noteHtml1}
+    ${noteHtml}
     ${noteHtml2}
   </div>`;
 }
 
-// Завантаження відносного шляху './ua.json' (чудово підходить для хостингу GitHub)
-fetch("./ua.json")
-  .then(r => {
-    if (!r.ok) throw new Error("Файл ua.json не знайдено на сервері");
-    return r.json();
-  })
+fetch("ua.json")
+  .then(r => r.json())
   .then(data => {
     data.features.forEach(f => {
       const code = f.properties.iso_3166_2 || f.properties.ISO_3166_2 || f.properties.id;
@@ -130,7 +123,7 @@ fetch("./ua.json")
         name: UA_NAMES[code] || code,
         fill: "#74add1",
         text: "#000000",
-        text2: "#ff0000",
+        text2: "#ff0000", // Початковий колір для другої замітки — червоний
         note: "",
         note2: ""
       };
@@ -141,16 +134,22 @@ fetch("./ua.json")
         const c = feature.properties.iso_3166_2 || feature.properties.ISO_3166_2 || feature.properties.id;
         return {
           fillColor: state[c]?.fill || "#ccc",
-          weight: 1.5,
+          weight: 1,
           color: "#333",
-          fillOpacity: 0.8
+          fillOpacity: 0.85
         };
       },
       onEachFeature: (feature, layer) => {
         const code = feature.properties.iso_3166_2 || feature.properties.ISO_3166_2 || feature.properties.id;
 
         layer.on({
-          mouseover: (e) => { e.target.setStyle({ weight: 3, color: "#000" }); },
+          mouseover: (e) => {
+            const l = e.target;
+            l.setStyle({ weight: 3, color: "#000" });
+            if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+              l.bringToFront();
+            }
+          },
           mouseout: (e) => { geoLayer.resetStyle(e.target); },
           click: () => selectRegion(code)
         });
@@ -162,10 +161,6 @@ fetch("./ua.json")
         }).openTooltip();
       }
     }).addTo(map);
-  })
-  .catch(err => {
-    console.error(err);
-    alert("Помилка карти: " + err.message + "\nПереконайтеся, що запускаєте через локальний Python-сервер або GitHub Pages.");
   });
 
 function selectRegion(code) {
@@ -177,11 +172,11 @@ function selectRegion(code) {
   document.getElementById("textColor").value = r.text;
   document.getElementById("note").value = r.note;
   
+  // Оновлення нових полів у формі при виборі області
   document.getElementById("textColor2").value = r.text2;
   document.getElementById("note2").value = r.note2;
 }
 
-// Слухачі подій інтерфейсу
 document.getElementById("fillColor").oninput = e => {
   if (!selectedCode) return;
   state[selectedCode].fill = e.target.value;
@@ -203,12 +198,14 @@ document.getElementById("note").oninput = e => {
   updateActiveTooltip();
 };
 
+// Зміна кольору для другої замітки
 document.getElementById("textColor2").oninput = e => {
   if (!selectedCode) return;
   state[selectedCode].text2 = e.target.value;
   updateActiveTooltip();
 };
 
+// Зміна тексту другої замітки
 document.getElementById("note2").oninput = e => {
   if (!selectedCode) return;
   state[selectedCode].note2 = e.target.value;
