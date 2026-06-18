@@ -10,7 +10,7 @@
 <style>
 body {
   margin: 0;
-  font-family: Arial;
+  font-family: Arial, sans-serif;
   display: flex;
   height: 100vh;
 }
@@ -19,6 +19,8 @@ body {
   width: 340px;
   padding: 15px;
   border-right: 1px solid #ddd;
+  box-sizing: border-box;
+  background: #f9f9f9;
 }
 
 #map {
@@ -26,13 +28,21 @@ body {
 }
 
 label {
-  display:block;
-  margin-top:10px;
+  display: block;
+  margin-top: 15px;
+  font-weight: bold;
 }
 
 input, textarea {
-  width:100%;
-  padding:5px;
+  width: 100%;
+  padding: 8px;
+  margin-top: 5px;
+  box-sizing: border-box;
+}
+
+textarea {
+  height: 60px;
+  resize: vertical;
 }
 </style>
 </head>
@@ -40,19 +50,19 @@ input, textarea {
 <body>
 
 <div id="sidebar">
-  <h3 id="regionTitle">Оберіть регіон</h3>
+  <h3 id="regionTitle">Оберіть регіон на карті</h3>
 
-  <label>Колір заливки</label>
-  <input type="color" id="fillColor">
+  <label>Колір заливки регіону</label>
+  <input type="color" id="fillColor" disabled>
 
-  <label>Колір тексту</label>
-  <input type="color" id="textColor">
+  <label>Колір тексту підписів</label>
+  <input type="color" id="textColor" disabled>
 
-  <label>Текст 1</label>
-  <textarea id="note"></textarea>
+  <label>Текст 1 (Великий)</label>
+  <textarea id="note" disabled></textarea>
 
-  <label>Текст 2</label>
-  <textarea id="note2"></textarea>
+  <label>Текст 2 (Великий)</label>
+  <textarea id="note2" disabled></textarea>
 </div>
 
 <div id="map"></div>
@@ -74,20 +84,22 @@ let state = {};
 let selected = null;
 let geoLayer = null;
 
-const map = L.map("map").setView([49,31],6);
+// Ініціалізація карти по центру України
+const map = L.map("map").setView([48.5, 31.2], 6);
 
 L.tileLayer(
   "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-  {attribution:""}
+  { attribution: "© OpenStreetMap contributors © CARTO" }
 ).addTo(map);
 
+// Завантаження геоданих (переконайтеся, що файл ua.json лежить поруч)
 fetch("ua.json")
-.then(r=>r.json())
-.then(data=>{    data.features.forEach(f=>{
-      const code =
-        f.properties.iso_3166_2 ||
-        f.properties.ISO_3166_2 ||
-        f.properties.id;
+.then(r => r.json())
+.then(data => {
+    // Спочатку наповнюємо об'єкт стану регіонів
+    data.features.forEach(f => {
+      const code = f.properties.iso_3166_2 || f.properties.ISO_3166_2 || f.properties.id;
+      if (!code) return;
 
       state[code] = {
         name: UA_NAMES[code] || code,
@@ -98,159 +110,125 @@ fetch("ua.json")
       };
     });
 
+    // Відображаємо шари на карті
     geoLayer = L.geoJSON(data, {
-      style: f=>{
-        const c =
-          f.properties.iso_3166_2 ||
-          f.properties.ISO_3166_2 ||
-          f.properties.id;
-
+      style: feature => {
+        const code = feature.properties.iso_3166_2 || feature.properties.ISO_3166_2 || feature.properties.id;
         return {
-          fillColor: state[c]?.fill || "#ccc",
+          fillColor: state[code]?.fill || "#ccc",
           color: "#333",
           weight: 1,
           fillOpacity: 0.85
         };
       },
 
-      onEachFeature: (feature, layer)=>{
+      onEachFeature: (feature, layer) => {
+        const code = feature.properties.iso_3166_2 || feature.properties.ISO_3166_2 || feature.properties.id;
+        if (!code) return;
 
-        const code =
-          feature.properties.iso_3166_2 ||
-          feature.properties.ISO_3166_2 ||
-          feature.properties.id;
+        // Події кліку та наведення миші
+        layer.on("click", () => selectRegion(code));
 
-        // CLICK
-        layer.on("click", ()=>selectRegion(code));
+        layer.on("mouseover", function() {
+          this.setStyle({ weight: 3, color: "#000" });
+          this.bringToFront();
+          if (this.label) this.label.bringToFront();
+        });
 
-        // HOVER (товстіший контур)
-        layer.on("mouseover", function(){
+        layer.on("mouseout", function() {
+          // Повертаємо поточний стиль із об'єкта стану, щоб не втрачати колір заливки
           this.setStyle({
-            weight: 4,
-            color: "#000"
+            weight: 1,
+            color: "#333",
+            fillColor: state[code]?.fill || "#ccc"
           });
         });
 
-        layer.on("mouseout", function(){
-          geoLayer.resetStyle(this);
-        });        const center = layer.getBounds().getCenter();
-
-        layer.label = L.marker(center, {
-          icon: L.divIcon({
-            className: "",
-            html: `
-              <div style="
-                text-align:center;
-                color:${state[code].text};
-                line-height:1.2;
-              ">
-
-                <div style="
-                  font-size:14px;
-                  font-weight:bold;
-                ">
-                  ${state[code].name}
-                </div>
-
-                <div style="
-                  font-size:38px;
-                  font-weight:bold;
-                ">
-                  ${state[code].note}
-                </div>
-
-                <div style="
-                  font-size:38px;
-                  font-weight:bold;
-                ">
-                  ${state[code].note2}
-                </div>
-
-              </div>
-            `
-          })
-        }).addTo(map);
-
+        // Створення текстового маркера по центру регіону
+        const center = layer.getBounds().getCenter();
+        createLabel(layer, code, center);
       }
     }).addTo(map);
-});function selectRegion(code){
+})
+.catch(err => console.error("Помилка завантаження ua.json:", err));
+
+// Функція створення/оновлення текстового напису
+function createLabel(layer, code, center) {
+  layer.label = L.marker(center, {
+    icon: L.divIcon({
+      className: "custom-region-label",
+      html: `
+        <div style="text-align:center; color:${state[code].text}; line-height:1.2; pointer-events:none; min-width:150px; transform:translate(-50%, -50%);">
+          <div style="font-size:12px; font-weight:bold; text-shadow: 1px 1px 2px white;">${state[code].name}</div>
+          <div style="font-size:28px; font-weight:bold; text-shadow: 1px 1px 2px white;">${state[code].note}</div>
+          <div style="font-size:28px; font-weight:bold; text-shadow: 1px 1px 2px white;">${state[code].note2}</div>
+        </div>
+      `
+    })
+  }).addTo(map);
+}
+
+// Вибір регіону при кліку
+function selectRegion(code) {
   selected = code;
   const r = state[code];
 
   document.getElementById("regionTitle").innerText = r.name;
-  document.getElementById("fillColor").value = r.fill;
-  document.getElementById("textColor").value = r.text;
-  document.getElementById("note").value = r.note;
-  document.getElementById("note2").value = r.note2;
-}document.getElementById("fillColor").oninput = e=>{
-  if(!selected) return;
-  state[selected].fill = e.target.value;
-  geoLayer.setStyle(f=>{
-    const c =
-      f.properties.iso_3166_2 ||
-      f.properties.ISO_3166_2 ||
-      f.properties.id;
-
-    return {fillColor: state[c].fill};
-  });
-};
-
-document.getElementById("textColor").oninput = e=>{
-  if(!selected) return;
-  state[selected].text = e.target.value;
-  redraw();
-};
-
-document.getElementById("note").oninput = e=>{
-  if(!selected) return;
-  state[selected].note = e.target.value;
-  redraw();
-};
-
-document.getElementById("note2").oninput = e=>{
-  if(!selected) return;
-  state[selected].note2 = e.target.value;
-  redraw();
-};function redraw(){
-
-  geoLayer.eachLayer(layer=>{
-    if(layer.label){
-      map.removeLayer(layer.label);
-    }
-
-    const c =
-      layer.feature.properties.iso_3166_2 ||
-      layer.feature.properties.ISO_3166_2 ||
-      layer.feature.properties.id;
-
-    const center = layer.getBounds().getCenter();
-
-    layer.label = L.marker(center, {
-      icon: L.divIcon({
-        className: "",
-        html: `
-          <div style="
-            text-align:center;
-            color:${state[c].text};
-            line-height:1.2;
-          ">
-
-            <div style="font-size:14px;font-weight:bold;">
-              ${state[c].name}
-            </div>
-
-            <div style="font-size:38px;font-weight:bold;">
-              ${state[c].note}
-            </div>
-
-            <div style="font-size:38px;font-weight:bold;">
-              ${state[c].note2}
-            </div>
-
-          </div>
-        `
-      })
-    }).addTo(map);
-
+  
+  // Активація полів введення
+  const inputs = ["fillColor", "textColor", "note", "note2"];
+  inputs.forEach(id => {
+    const el = document.getElementById(id);
+    el.value = r[id === "fillColor" ? "fill" : id === "textColor" ? "text" : id];
+    el.disabled = false;
   });
 }
+
+// Оновлення кольору заливки карти
+document.getElementById("fillColor").oninput = e => {
+  if (!selected) return;
+  state[selected].fill = e.target.value;
+  
+  geoLayer.eachLayer(layer => {
+    const c = layer.feature.properties.iso_3166_2 || layer.feature.properties.ISO_3166_2 || layer.feature.properties.id;
+    if (c === selected) {
+      layer.setStyle({ fillColor: state[selected].fill });
+    }
+  });
+};
+
+// Спільна функція динамічного оновлення текстів та їх кольору без перезапуску шарів
+function updateLabels() {
+  if (!selected) return;
+  
+  geoLayer.eachLayer(layer => {
+    const c = layer.feature.properties.iso_3166_2 || layer.feature.properties.ISO_3166_2 || layer.feature.properties.id;
+    if (c === selected) {
+      // Видаляємо старий маркер перед створенням нового
+      if (layer.label) {
+        map.removeLayer(layer.label);
+      }
+      const center = layer.getBounds().getCenter();
+      createLabel(layer, selected, center);
+    }
+  });
+}
+
+document.getElementById("textColor").oninput = e => {
+  state[selected].text = e.target.value;
+  updateLabels();
+};
+
+document.getElementById("note").oninput = e => {
+  state[selected].note = e.target.value;
+  updateLabels();
+};
+
+document.getElementById("note2").oninput = e => {
+  state[selected].note2 = e.target.value;
+  updateLabels();
+};
+</script>
+
+</body>
+</html>
