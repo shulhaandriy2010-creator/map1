@@ -7,9 +7,9 @@
 <!-- Leaflet (працює ВСЮДИ) -->
 <link
   rel="stylesheet"
-  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  href="https://unpkg.com"
 />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com"></script>
 
 <style>
   body {
@@ -40,6 +40,14 @@
     width: 100%;
     box-sizing: border-box;
     padding: 5px;
+  }
+
+  /* Стилі для прозорих підписів областей без білих рамок Leaflet */
+  .region-tooltip {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    pointer-events: none !important;
   }
 </style>
 </head>
@@ -97,9 +105,18 @@ let selectedCode = null;
 let geoLayer = null;
 
 const map = L.map("map").setView([49, 31], 6);
-L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+L.tileLayer("https://{s}://{z}/{x}/{y}{r}.png", {
   attribution: ""
 }).addTo(map);
+
+// Функція формування HTML для підпису області
+function createTooltipHtml(r) {
+  // Замінюємо переноси рядків на <br> та огортаємо в блок, якщо текст є
+  const noteHtml = r.note ? `<div style="margin-top:4px; font-weight:normal;">${r.note.replace(/\n/g, '<br>')}</div>` : '';
+  return `<div style="font-size:11px; text-align:center; color:${r.text}; font-family:Arial,sans-serif; line-height:1.2;">
+    <b>${r.name}</b>${noteHtml}
+  </div>`;
+}
 
 fetch("ua.json")
   .then(r => r.json())
@@ -127,17 +144,30 @@ fetch("ua.json")
       onEachFeature: (feature, layer) => {
         const code = feature.properties.iso_3166_2 || feature.properties.ISO_3166_2 || feature.properties.id;
 
-        layer.on("click", () => selectRegion(code));
+        // Події миші для інтерактивності контурів
+        layer.on({
+          mouseover: (e) => {
+            const l = e.target;
+            l.setStyle({
+              weight: 3,     // Товщина лінії при наведенні
+              color: "#000"  // Колір лінії при наведенні
+            });
+            if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+              l.bringToFront(); // Виводить шар на передній план
+            }
+          },
+          mouseout: (e) => {
+            geoLayer.resetStyle(e.target); // Повертає початковий тонкий стиль
+          },
+          click: () => selectRegion(code)
+        });
 
-        const center = layer.getBounds().getCenter();
-        layer.label = L.marker(center, {
-          icon: L.divIcon({
-            className: "",
-            html: `<div style="font-size:10px;text-align:center;color:${state[code].text}">
-              <b>${state[code].name}</b><br>${state[code].note}
-            </div>`
-          })
-        }).addTo(map);
+        // Створення постійного підпису по центру кожної області
+        layer.bindTooltip(() => createTooltipHtml(state[code]), {
+          permanent: true,
+          direction: "center",
+          className: "region-tooltip"
+        }).openTooltip();
       }
     }).addTo(map);
   });
@@ -152,6 +182,7 @@ function selectRegion(code) {
   document.getElementById("note").value = r.note;
 }
 
+// Зміна кольору заливки
 document.getElementById("fillColor").oninput = e => {
   if (!selectedCode) return;
   state[selectedCode].fill = e.target.value;
@@ -161,31 +192,29 @@ document.getElementById("fillColor").oninput = e => {
   });
 };
 
+// Зміна кольору тексту
 document.getElementById("textColor").oninput = e => {
   if (!selectedCode) return;
   state[selectedCode].text = e.target.value;
-  map.eachLayer(l => {
-    if (l.label) map.removeLayer(l.label);
-  });
-  geoLayer.eachLayer(layer => {
-    const c = layer.feature.properties.iso_3166_2 || layer.feature.properties.ISO_3166_2 || layer.feature.properties.id;
-    const center = layer.getBounds().getCenter();
-    layer.label = L.marker(center, {
-      icon: L.divIcon({
-        className: "",
-        html: `<div style="font-size:10px;text-align:center;color:${state[c].text}">
-          <b>${state[c].name}</b><br>${state[c].note}
-        </div>`
-      })
-    }).addTo(map);
-  });
+  updateActiveTooltip();
 };
 
+// Зміна тексту замітки
 document.getElementById("note").oninput = e => {
   if (!selectedCode) return;
   state[selectedCode].note = e.target.value;
-  document.getElementById("textColor").dispatchEvent(new Event("input"));
+  updateActiveTooltip();
 };
+
+// Точкове оновлення підпису поточної області без перезапуску інших шарів
+function updateActiveTooltip() {
+  geoLayer.eachLayer(layer => {
+    const c = layer.feature.properties.iso_3166_2 || layer.feature.properties.ISO_3166_2 || layer.feature.properties.id;
+    if (c === selectedCode) {
+      layer.setTooltipContent(createTooltipHtml(state[c]));
+    }
+  });
+}
 </script>
 
 </body>
