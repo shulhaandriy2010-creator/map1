@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <title>Інтерактивна карта України</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com"/>
+<script src="https://unpkg.com"></script>
 
 <style>
 body {
@@ -21,6 +21,23 @@ body {
   border-right: 1px solid #ddd;
   box-sizing: border-box;
   background: #f9f9f9;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.controls {
+  overflow-y: auto;
+  flex: 1;
+  padding-bottom: 15px;
+}
+
+.buttons-panel {
+  border-top: 1px solid #ddd;
+  padding-top: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 #map {
@@ -44,28 +61,74 @@ textarea {
   height: 60px;
   resize: vertical;
 }
+
+button {
+  width: 100%;
+  padding: 10px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
+.btn-presentation {
+  background-color: #28a745;
+}
+
+.btn-presentation:hover {
+  background-color: #218838;
+}
+
+/* Кнопка повернення з презентації, яка з'являється на карті */
+#exitPresBtn {
+  position: absolute;
+  top: 10px;
+  left: 60px;
+  z-index: 1000;
+  display: none;
+  width: auto;
+  background-color: #dc3545;
+}
+#exitPresBtn:hover {
+  background-color: #c82333;
+}
 </style>
 </head>
 
 <body>
 
 <div id="sidebar">
-  <h3 id="regionTitle">Оберіть регіон на карті</h3>
+  <div class="controls">
+    <h3 id="regionTitle">Оберіть регіон на карті</h3>
 
-  <label>Колір заливки регіону</label>
-  <input type="color" id="fillColor" disabled>
+    <label>Колір заливки регіону</label>
+    <input type="color" id="fillColor" disabled>
 
-  <label>Колір тексту підписів</label>
-  <input type="color" id="textColor" disabled>
+    <label>Колір тексту підписів</label>
+    <input type="color" id="textColor" disabled>
 
-  <label>Текст 1 (Великий)</label>
-  <textarea id="note" disabled></textarea>
+    <label>Текст 1 (Великий)</label>
+    <textarea id="note" disabled></textarea>
 
-  <label>Текст 2 (Великий)</label>
-  <textarea id="note2" disabled></textarea>
+    <label>Текст 2 (Великий)</label>
+    <textarea id="note2" disabled></textarea>
+  </div>
+
+  <div class="buttons-panel">
+    <button onclick="exportData()">Експорт JSON</button>
+    <button onclick="togglePresentation()" class="btn-presentation">Режим презентації</button>
+  </div>
 </div>
 
-<div id="map"></div>
+<div id="map">
+  <button id="exitPresBtn" onclick="togglePresentation()">Вийти з презентації</button>
+</div>
 
 <script>
 const UA_NAMES = {
@@ -83,20 +146,21 @@ const UA_NAMES = {
 let state = {};
 let selected = null;
 let geoLayer = null;
+let presentation = false;
 
-// Ініціалізація карти по центру України
+// Ініціалізація карти
 const map = L.map("map").setView([48.5, 31.2], 6);
 
 L.tileLayer(
-  "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+  "https://{s}://{z}/{x}/{y}{r}.png",
   { attribution: "© OpenStreetMap contributors © CARTO" }
 ).addTo(map);
 
-// Завантаження геоданих (переконайтеся, що файл ua.json лежить поруч)
+// Завантаження та ініціалізація
 fetch("ua.json")
 .then(r => r.json())
 .then(data => {
-    // Спочатку наповнюємо об'єкт стану регіонів
+    // 1. Спочатку створюємо базовий стан
     data.features.forEach(f => {
       const code = f.properties.iso_3166_2 || f.properties.ISO_3166_2 || f.properties.id;
       if (!code) return;
@@ -110,7 +174,10 @@ fetch("ua.json")
       };
     });
 
-    // Відображаємо шари на карті
+    // 2. Завантажуємо збережений стан з localStorage, якщо він є
+    loadState();
+
+    // 3. Малюємо шари на карті, використовуючи актуальний стан
     geoLayer = L.geoJSON(data, {
       style: feature => {
         const code = feature.properties.iso_3166_2 || feature.properties.ISO_3166_2 || feature.properties.id;
@@ -126,7 +193,6 @@ fetch("ua.json")
         const code = feature.properties.iso_3166_2 || feature.properties.ISO_3166_2 || feature.properties.id;
         if (!code) return;
 
-        // Події кліку та наведення миші
         layer.on("click", () => selectRegion(code));
 
         layer.on("mouseover", function() {
@@ -136,7 +202,6 @@ fetch("ua.json")
         });
 
         layer.on("mouseout", function() {
-          // Повертаємо поточний стиль із об'єкта стану, щоб не втрачати колір заливки
           this.setStyle({
             weight: 1,
             color: "#333",
@@ -144,7 +209,6 @@ fetch("ua.json")
           });
         });
 
-        // Створення текстового маркера по центру регіону
         const center = layer.getBounds().getCenter();
         createLabel(layer, code, center);
       }
@@ -152,7 +216,7 @@ fetch("ua.json")
 })
 .catch(err => console.error("Помилка завантаження ua.json:", err));
 
-// Функція створення/оновлення текстового напису
+// Створення/оновлення підписів
 function createLabel(layer, code, center) {
   layer.label = L.marker(center, {
     icon: L.divIcon({
@@ -168,14 +232,30 @@ function createLabel(layer, code, center) {
   }).addTo(map);
 }
 
-// Вибір регіону при кліку
+// Функції збереження та завантаження локального стану
+function saveState(){
+  localStorage.setItem("ua_map_state", JSON.stringify(state));
+}
+
+function loadState(){
+  const saved = localStorage.getItem("ua_map_state");
+  if(!saved) return;
+
+  const parsed = JSON.parse(saved);
+  for(const k in parsed){
+    if(state[k]){
+      state[k] = parsed[k];
+    }
+  }
+}
+
+// Вибір регіону
 function selectRegion(code) {
   selected = code;
   const r = state[code];
 
   document.getElementById("regionTitle").innerText = r.name;
   
-  // Активація полів введення
   const inputs = ["fillColor", "textColor", "note", "note2"];
   inputs.forEach(id => {
     const el = document.getElementById(id);
@@ -184,7 +264,23 @@ function selectRegion(code) {
   });
 }
 
-// Оновлення кольору заливки карти
+// Оновлення конкретного маркера на карті
+function updateLabels() {
+  if (!selected) return;
+  
+  geoLayer.eachLayer(layer => {
+    const c = layer.feature.properties.iso_3166_2 || layer.feature.properties.ISO_3166_2 || layer.feature.properties.id;
+    if (c === selected) {
+      if (layer.label) {
+        map.removeLayer(layer.label);
+      }
+      const center = layer.getBounds().getCenter();
+      createLabel(layer, selected, center);
+    }
+  });
+}
+
+// Обробники подій для полів введення (Оновлення + Збереження)
 document.getElementById("fillColor").oninput = e => {
   if (!selected) return;
   state[selected].fill = e.target.value;
@@ -195,39 +291,62 @@ document.getElementById("fillColor").oninput = e => {
       layer.setStyle({ fillColor: state[selected].fill });
     }
   });
+  saveState();
 };
 
-// Спільна функція динамічного оновлення текстів та їх кольору без перезапуску шарів
-function updateLabels() {
-  if (!selected) return;
-  
-  geoLayer.eachLayer(layer => {
-    const c = layer.feature.properties.iso_3166_2 || layer.feature.properties.ISO_3166_2 || layer.feature.properties.id;
-    if (c === selected) {
-      // Видаляємо старий маркер перед створенням нового
-      if (layer.label) {
-        map.removeLayer(layer.label);
-      }
-      const center = layer.getBounds().getCenter();
-      createLabel(layer, selected, center);
-    }
-  });
-}
-
 document.getElementById("textColor").oninput = e => {
+  if (!selected) return;
   state[selected].text = e.target.value;
   updateLabels();
+  saveState();
 };
 
 document.getElementById("note").oninput = e => {
+  if (!selected) return;
   state[selected].note = e.target.value;
   updateLabels();
+  saveState();
 };
 
 document.getElementById("note2").oninput = e => {
+  if (!selected) return;
   state[selected].note2 = e.target.value;
   updateLabels();
+  saveState();
 };
+
+// Експорт даних у файл JSON
+function exportData(){
+  const blob = new Blob(
+    [JSON.stringify(state, null, 2)],
+    {type:"application/json"}
+  );
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "ua-map-data.json";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Режим презентації
+function togglePresentation(){
+  presentation = !presentation;
+
+  const sidebar = document.getElementById("sidebar");
+  const exitBtn = document.getElementById("exitPresBtn");
+
+  if(presentation) {
+    sidebar.style.display = "none";
+    exitBtn.style.display = "block";
+  } else {
+    sidebar.style.display = "flex";
+    exitBtn.style.display = "none";
+  }
+
+  setTimeout(() => map.invalidateSize(), 300);
+}
 </script>
 
 </body>
