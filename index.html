@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>Інтерактивна карта України</title>
 
-<!-- Leaflet (Виправлені посилання для стабільної роботи) -->
+<!-- Leaflet (Повні та виправлені посилання, без яких буде білий екран) -->
 <link rel="stylesheet" href="https://unpkg.com" />
 <script src="https://unpkg.com"></script>
 
@@ -21,11 +21,12 @@
     padding: 15px;
     border-right: 1px solid #ddd;
     box-sizing: border-box;
-    overflow-y: auto; /* Додано прокрутку, якщо контент не вміщається */
+    overflow-y: auto;
   }
 
   #map {
     flex: 1;
+    background: #f0f0f0; /* Сіре тло, поки завантажується карта */
   }
 
   label {
@@ -35,7 +36,7 @@
     font-weight: bold;
   }
 
-  /* Розмір тексту у полях введення збільшено вдвічі (було ~14px, стало 28px) */
+  /* Текст у полях введення збільшено вдвічі */
   input, textarea {
     width: 100%;
     box-sizing: border-box;
@@ -43,7 +44,6 @@
     font-size: 28px; 
   }
 
-  /* Стилі для палітри кольорів, щоб вона не була занадто гігантською */
   input[type="color"] {
     height: 50px;
     padding: 2px;
@@ -72,7 +72,6 @@
   <label>Додатковий текст 1</label>
   <textarea id="note" rows="2"></textarea>
 
-  <!-- Нові елементи для другого тексту та його особистого кольору -->
   <label>Колір тексту замітки 2</label>
   <input type="color" id="textColor2">
 
@@ -99,12 +98,13 @@ const state = {};
 let selectedCode = null;
 let geoLayer = null;
 
+// Ініціалізація карти
 const map = L.map("map").setView([49, 31], 6);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "&copy; OpenStreetMap contributors"
 }).addTo(map);
 
-// Функція формування HTML для підпису області з урахуванням другого тексту
+// Функція формування HTML для підписів
 function createTooltipHtml(r) {
   const noteHtml1 = r.note ? `<div style="margin-top:4px; font-weight:normal; color:${r.text};">${r.note.replace(/\n/g, '<br>')}</div>` : '';
   const noteHtml2 = r.note2 ? `<div style="margin-top:4px; font-weight:normal; color:${r.text2};">${r.note2.replace(/\n/g, '<br>')}</div>` : '';
@@ -116,8 +116,12 @@ function createTooltipHtml(r) {
   </div>`;
 }
 
+// Завантаження геоданих (файл ua.json має лежати в тій самій папці)
 fetch("ua.json")
-  .then(r => r.json())
+  .then(r => {
+    if (!r.ok) throw new Error("Не вдалося завантажити ua.json");
+    return r.json();
+  })
   .then(data => {
     data.features.forEach(f => {
       const code = f.properties.iso_3166_2 || f.properties.ISO_3166_2 || f.properties.id;
@@ -125,7 +129,7 @@ fetch("ua.json")
         name: UA_NAMES[code] || code,
         fill: "#74add1",
         text: "#000000",
-        text2: "#ff0000", // Початковий колір для другої замітки (червоний)
+        text2: "#ff0000",
         note: "",
         note2: ""
       };
@@ -163,7 +167,8 @@ fetch("ua.json")
         }).openTooltip();
       }
     }).addTo(map);
-  });
+  })
+  .catch(err => console.error(err));
 
 function selectRegion(code) {
   selectedCode = code;
@@ -174,12 +179,11 @@ function selectRegion(code) {
   document.getElementById("textColor").value = r.text;
   document.getElementById("note").value = r.note;
   
-  // Оновлення нових полів у формі
   document.getElementById("textColor2").value = r.text2;
   document.getElementById("note2").value = r.note2;
 }
 
-// Зміна кольору заливки
+// Події зміни параметрів
 document.getElementById("fillColor").oninput = e => {
   if (!selectedCode) return;
   state[selectedCode].fill = e.target.value;
@@ -189,28 +193,24 @@ document.getElementById("fillColor").oninput = e => {
   });
 };
 
-// Зміна кольору першого тексту
 document.getElementById("textColor").oninput = e => {
   if (!selectedCode) return;
   state[selectedCode].text = e.target.value;
   updateActiveTooltip();
 };
 
-// Зміна тексту першої замітки
 document.getElementById("note").oninput = e => {
   if (!selectedCode) return;
   state[selectedCode].note = e.target.value;
   updateActiveTooltip();
 };
 
-// Зміна кольору другого тексту
 document.getElementById("textColor2").oninput = e => {
   if (!selectedCode) return;
   state[selectedCode].text2 = e.target.value;
   updateActiveTooltip();
 };
 
-// Зміна тексту другої замітки
 document.getElementById("note2").oninput = e => {
   if (!selectedCode) return;
   state[selectedCode].note2 = e.target.value;
