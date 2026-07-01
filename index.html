@@ -58,10 +58,10 @@ textarea {
   <label>Колір тексту підписів</label>
   <input type="color" id="textColor" disabled>
 
-  <label>Текст 1 (Великий)</label>
+  <label>Текст 1 </label>
   <textarea id="note" disabled></textarea>
 
-  <label>Текст 2 (Великий)</label>
+  <label>Текст 2 </label>
   <textarea id="note2" disabled></textarea>
 </div>
 
@@ -160,8 +160,8 @@ function createLabel(layer, code, center) {
       html: `
         <div style="text-align:center; color:${state[code].text}; line-height:1.2; pointer-events:none; min-width:150px; transform:translate(-50%, -50%);">
           <div style="font-size:12px; font-weight:bold; text-shadow: 1px 1px 2px white;">${state[code].name}</div>
-          <div style="font-size:28px; font-weight:bold; text-shadow: 1px 1px 2px white;">${state[code].note}</div>
-          <div style="font-size:28px; font-weight:bold; text-shadow: 1px 1px 2px white;">${state[code].note2}</div>
+          <div style="font-size:21px; font-weight:bold; text-shadow: 1px 1px 2px white;">${state[code].note}</div>
+          <div style="font-size:21px; font-weight:bold; text-shadow: 1px 1px 2px white;">${state[code].note2}</div>
         </div>
       `
     })
